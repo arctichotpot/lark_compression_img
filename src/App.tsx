@@ -2,9 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { bitable, ITable, IAttachmentField } from "@lark-base-open/js-sdk";
 import { Button, Divider, Image, Space, Typography, Toast, Spin, Form, Card, Tooltip, Popconfirm,Banner } from '@douyinfe/semi-ui';
 import imageCompression from 'browser-image-compression';
-import { cloneDeep } from "lodash";
+import { cloneDeep,debounce } from "lodash";
 import { IconInfoCircle } from "@douyinfe/semi-icons";
-import { debounce } from 'lodash';
 import './App.css';
 
 // 定义类型
