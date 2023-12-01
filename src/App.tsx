@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { bitable, ITable, IAttachmentField } from "@lark-base-open/js-sdk";
-import { Button, Divider, Image, Space, Typography, Toast, Spin, Form, Card, Tooltip, Popconfirm,Banner } from '@douyinfe/semi-ui';
+import { bitable, ITable, IAttachmentField, Selection } from "@lark-base-open/js-sdk";
+import { Button, Divider, Image, Space, Typography, Toast, Spin, Form, Card, Tooltip, Popconfirm, Banner } from '@douyinfe/semi-ui';
 import imageCompression from 'browser-image-compression';
-import { cloneDeep,debounce } from "lodash";
+import { cloneDeep, debounce } from "lodash";
 import { IconInfoCircle } from "@douyinfe/semi-icons";
 import './App.css';
+
+import { useTranslation, Trans } from 'react-i18next';
+
+
 
 // 定义类型
 type ImageItem = {
@@ -41,6 +45,8 @@ const formatFileSize = (fileSizeInBytes: number): string => {
 };
 
 
+const WHITE_LIST: string[] = ['jpeg', 'png', 'webp', 'bmp', 'jpg']
+
 
 
 export default function App() {
@@ -53,6 +59,8 @@ export default function App() {
   const tableRef = useRef<ITable | null>(null);
   const selectionFieldRef = useRef<IAttachmentField | null>(null);
   const lastFieldIdRef = useRef<string | null>(null);
+
+  const { t } = useTranslation();
 
 
   const isFetchingRef = useRef(false); // 用于标记是否正在获取数据
@@ -67,13 +75,15 @@ export default function App() {
     const init = async () => {
       try {
         bitable.base.onSelectionChange(
-          debounce(handleSelectionChange, 100) // 使用 lodash 的 debounce 方法
+          handleSelectionChange
+          // debounce(handleSelectionChange, 100) // 使用 lodash 的 debounce 方法
         );
       } catch (e) {
         console.log(e);
       }
     };
     init();
+    handleSelectionChange()
   }, []);
 
 
@@ -82,18 +92,19 @@ export default function App() {
       console.log("Previous fetch in progress, cancelling...");
       return; // 如果正在获取数据，则取消
     }
-    console.log(patternRef.current);
     const currentSelection = await bitable.base.getSelection();
-    console.log(currentSelection);
+    console.log(currentSelection)
+
+
     if (currentSelection.fieldId && currentSelection.recordId) {
       if (patternRef.current === 'field' && lastFieldIdRef.current === currentSelection?.fieldId) {
         return;
       }
       lastFieldIdRef.current = currentSelection?.fieldId || null;
-      getData();
+      getData(currentSelection);
     } else {
-      // setImageRecordList([]);
-      // setLoading(false);
+      setImageRecordList([]);
+      setLoading(false);
     }
   }, []);
 
@@ -101,37 +112,45 @@ export default function App() {
 
   const onPatternChange = async (pa: string) => {
     patternRef.current = pa; // 每次 pattern 更新时，更新其在 useRef 中的值
-    console.log(patternRef.current)
 
     await getData()
   }
 
 
 
-  const getData = async () => {
+  const getData = async (selection?: Selection) => {
     const currentPattern = patternRef.current; // 使用 useRef 中的最新值
-
 
     setLoading(true);
 
     try {
       tableRef.current = await bitable.base.getActiveTable();
-      if (!tableRef.current) {
-        setImageRecordList([])
-        setLoading(false);
+      if (!selection) selection = await bitable.base.getSelection();
 
-        return;
-      }
 
-      const selection = await bitable.base.getSelection();
-      if (!selection) {
-        setImageRecordList([])
-        setLoading(false);
-        return;
-      }
+      // const selection = await bitable.base.getSelection();
+
+      // if (!tableRef.current) {
+      //   setImageRecordList([])
+      //   setLoading(false);
+
+      //   return;
+      // }
+
+      // if (!selection) {
+      //   setImageRecordList([])
+      //   setLoading(false);
+      //   return;
+      // }
 
       const field = await tableRef.current.getField<IAttachmentField>(selection.fieldId as string);
-      if (!field) {
+
+      const meta = await field.getMeta()
+
+
+      console.log(meta)
+
+      if (!field || meta.type !== 17) {
         setImageRecordList([])
         setLoading(false);
         return;
@@ -142,7 +161,6 @@ export default function App() {
 
       let recordList = [];
 
-      console.log(currentPattern)
 
 
       if (currentPattern === 'cell') {
@@ -153,22 +171,20 @@ export default function App() {
           recordList.push(record.id)
         }
       }
-      console.log(recordList)
 
 
 
-      const images = await Promise.all(recordList.map(async recordId => {
-        console.log(recordId)
-        let imgs: ImageItem[] | [] = []
+      const images: ImageRecordList[] = await Promise.all(recordList.map(async recordId => {
+        let imgs: ImageItem[] = []
 
         const imgItems = await field.getValue(recordId as string);
 
-        console.log(imgItems)
 
         if (imgItems) {
 
           imgs = await Promise.all(imgItems.filter(img => img.type.startsWith('image')).map(async img => {
             const url = await tableRef.current?.getAttachmentUrl(img.token) as string;
+            console.log(img)
             return {
               ...img,
               url,
@@ -177,21 +193,22 @@ export default function App() {
           }))
         }
 
-
-
-
         return {
           recordId: recordId as string,
-          fieldId: selection.fieldId as string,
+          fieldId: selection?.fieldId as string,
           images: imgs
         };
       }));
 
-      console.log(images.filter(item => item.images.length > 0))
-      console.log(images)
+      const res: ImageRecordList[] = images.filter(item => item.images.length > 0).map(item => {
+        return {
+          ...item,
+          // 不支持的图片格式
+          // images: item.images.filter(img => WHITE_LIST.includes(img.type.split('/')[1]))
+        }
+      })
 
-
-      setImageRecordList(images.filter(item => item.images.length > 0));
+      setImageRecordList(res);
     } catch (e) {
       console.error(e);
     } finally {
@@ -199,7 +216,6 @@ export default function App() {
       setLoading(false);
     }
   };
-
 
 
 
@@ -211,13 +227,20 @@ export default function App() {
     for (const record of list) {
       const arr: ImageItem[] = []
       for (let item of record.images) {
-        const file = await imageCompression(item.file, {
-          maxSizeMB: 2,
-          maxWidthOrHeight: 1024,
-          useWebWorker: true,
-          initialQuality: (100 - compressNum) / 100,
-          alwaysKeepResolution: true
-        });
+
+        let file: File | null = null
+
+
+        if (WHITE_LIST.includes(item.type.split('/')[1])) {
+          file = await imageCompression(item.file, {
+            maxSizeMB: 2,
+            maxWidthOrHeight: 1024,
+            useWebWorker: true,
+            initialQuality: (100 - compressNum) / 100,
+            alwaysKeepResolution: true
+          });
+
+        } else file = item.file
 
         arr.push({ ...item, file })
 
@@ -254,7 +277,7 @@ export default function App() {
         resArr.push(res as boolean)
       }
 
-      Toast.info(resArr.includes(false) ? "压缩失败!" : '应用成功!')
+      Toast.info(resArr.includes(false) ? t('failed') : t('success'))
       setLoading(false)
     }
     catch (e) {
@@ -292,44 +315,44 @@ export default function App() {
 
   return (
     <Spin spinning={loading}>
-        {/* <Banner 
-            type="info"
-            description="使用过程中请保持单元"
-        /> */}
       <main className="main" >
-        <Card  >
+        <Banner
+          type="info"
+          description={t('banner') + '      ' + WHITE_LIST.join(' , ').toLocaleUpperCase() + '.' + t('banner_tip')}
+        />
+        <Card >
 
           <Form onValueChange={values => {
             setPattern(values.pattern as string)
             setCompressNum(values.compressNum as number)
 
           }} initValues={{ compressNum, pattern }}>
-            <Form.Section text={'压缩设置'}>
+            <Form.Section text={t('title')}>
               <Form.Slider max={100} min={1} field='compressNum' label={
                 <Space>
-                  <span> 压缩粒度:{compressNum}</span>
-                  <Tooltip content={'压缩的粒度越大,压缩的图片越小'}>
+                  <span> {t('size')}:{compressNum}</span>
+                  <Tooltip content={t('tip')}>
                     <IconInfoCircle />
 
                   </Tooltip>
                 </Space>
               } />
 
-              <Form.Select field='pattern' label="压缩模式" onChange={e => onPatternChange(e as string)}>
-                <Form.Select.Option value="cell">压缩当前选中单元格</Form.Select.Option>
-                <Form.Select.Option value="field">压缩整列</Form.Select.Option>
+              <Form.Select field='pattern' label={t('mode')} onChange={e => onPatternChange(e as string)}>
+                <Form.Select.Option value="cell">{t('cell')}</Form.Select.Option>
+                <Form.Select.Option value="field">{t('field')}</Form.Select.Option>
               </Form.Select>
 
             </Form.Section>
           </Form>
 
           <Space>
-            <Button disabled={imageRecordList.length === 0 || loading} theme='solid' onClick={handleCompress} >压缩</Button>
+            <Button disabled={imageRecordList.length === 0 || loading} theme='solid' onClick={handleCompress} >{t('compress')}</Button>
             <Popconfirm
-              title="确定要批量更新吗？"
+              title={t('popconfirm')}
               onConfirm={confirmCompress}
             >
-              <Button disabled={imageRecordList.length === 0 || loading} theme='solid' >应用</Button>
+              <Button disabled={imageRecordList.length === 0 || loading} theme='solid' >{t('apply')}</Button>
             </Popconfirm>
 
           </Space>
@@ -337,11 +360,10 @@ export default function App() {
 
         <Divider margin='12px' />
         {
-          imageRecordList.length > 0 ? <ImageListEl /> : `请先选择图片所在${pattern === 'cell' ? '单元格' : '列'}`
+          imageRecordList.length > 0 ? <ImageListEl /> : ` ${pattern === 'cell' ? t('text_cell') : t('text_field')}`
         }
 
       </main>
     </Spin>
   )
 }
-

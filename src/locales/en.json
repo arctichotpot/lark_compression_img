@@ -1,3 +1,18 @@
 {
-  "title":"这是英文标题"
+  "title": "Compression setting",
+  "size": "Compression size",
+  "tip": "The larger the compression granularity, the smaller the compressed image",
+  "mode": "Compression mode",
+  "cell": "Compress the currently selected cell",
+  "field": "Compress the current table column",
+  "popconfirm": "Are you sure you want to update?",
+  "compress": "Compress",
+  "apply": "Apply",
+  "text_cell": "Please select the cell where the image is located first",
+  "text_field": "Please select the columns where the image is located first",
+  "failed": "Apply failed!",
+  "success": "Apply successful!",
+  "banner":"Currently, only the following commonly used formats are supported:",
+  "banner_tip":"Unsupported formats are not compressed!"
+
 }
