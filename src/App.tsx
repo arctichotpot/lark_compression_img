@@ -124,7 +124,9 @@ export default function App() {
     setLoading(true);
 
     try {
-      tableRef.current = await bitable.base.getActiveTable();
+
+      const table: ITable = await bitable.base.getActiveTable();
+      // tableRef.current = await bitable.base.getActiveTable();
       if (!selection) selection = await bitable.base.getSelection();
 
 
@@ -143,7 +145,7 @@ export default function App() {
       //   return;
       // }
 
-      const field = await tableRef.current.getField<IAttachmentField>(selection.fieldId as string);
+      const field = await table.getField<IAttachmentField>(selection.fieldId as string);
 
       const meta = await field.getMeta()
 
@@ -166,7 +168,7 @@ export default function App() {
       if (currentPattern === 'cell') {
         recordList.push(selection.recordId);
       } else {
-        const allRecords = await tableRef.current.getRecordList();
+        const allRecords = await table.getRecordList();
         for (const record of allRecords) {
           recordList.push(record.id)
         }
@@ -174,41 +176,48 @@ export default function App() {
 
 
 
-      const images: ImageRecordList[] = await Promise.all(recordList.map(async recordId => {
-        let imgs: ImageItem[] = []
+      try {
+        const images: ImageRecordList[] = await Promise.all(recordList.map(async recordId => {
+          let imgs: ImageItem[] = []
 
-        const imgItems = await field.getValue(recordId as string);
+          const imgItems = await field.getValue(recordId as string);
+
+          console.log(imgItems)
 
 
-        if (imgItems) {
+          if (imgItems) {
 
-          imgs = await Promise.all(imgItems.filter(img => img.type.startsWith('image')).map(async img => {
-            const url = await tableRef.current?.getAttachmentUrl(img.token) as string;
-            console.log(img)
-            return {
-              ...img,
-              url,
-              file: await fetchImageAsFile(url, img.name)
-            };
-          }))
-        }
+            imgs = await Promise.all(imgItems.filter((img: { type: string; }) => img.type.startsWith('image')).map(async img => {
+              console.log(img)
+              const url = await table.getAttachmentUrl(img.token, selection?.fieldId as string, recordId as string) as string;
+              console.log(url)
 
-        return {
-          recordId: recordId as string,
-          fieldId: selection?.fieldId as string,
-          images: imgs
-        };
-      }));
+              const file = await fetchImageAsFile(url, img.name)
+              return {
+                ...img,
+                url,
+                file
+              };
+            }))
+          }
 
-      const res: ImageRecordList[] = images.filter(item => item.images.length > 0).map(item => {
-        return {
-          ...item,
-          // 不支持的图片格式
-          // images: item.images.filter(img => WHITE_LIST.includes(img.type.split('/')[1]))
-        }
-      })
+          return {
+            recordId: recordId as string,
+            fieldId: selection?.fieldId as string,
+            images: imgs
+          };
+        }));
 
-      setImageRecordList(res);
+        console.log(images)
+
+        const res: ImageRecordList[] = images.filter(item => item.images.length > 0)
+
+        setImageRecordList(res);
+      } catch (e) {
+        console.log(e)
+      }
+
+
     } catch (e) {
       console.error(e);
     } finally {
@@ -289,14 +298,18 @@ export default function App() {
 
 
   const ImageListEl = () => {
+    console.log(imageRecordList)
 
+    // return <div>123123</div>
     return <>
       {
         imageRecordList.map(item => {
+          console.log(item)
           return item.images.map(img => {
+            console.log(img)
             return <Space vertical key={img.name}>
               <Image
-                preview={false}
+              preview={false}
                 width={100}
                 height={100}
                 src={img.url}
@@ -359,6 +372,7 @@ export default function App() {
         </Card>
 
         <Divider margin='12px' />
+
         {
           imageRecordList.length > 0 ? <ImageListEl /> : ` ${pattern === 'cell' ? t('text_cell') : t('text_field')}`
         }
